@@ -10,11 +10,13 @@ Cross-platform, fully local transcription tool that converts **MP3** and **MP4**
 - Outputs **plain text only** (`.txt`) - no timestamps, subtitles, or diarization
 - Cross-platform paths via `pathlib` (Windows + Linux)
 - Clean engine abstraction (future engines can be added without changing CLI logic)
+- Interactive menu mode for prompts, settings, and system stats
 
 ## Requirements
 
 - Python **3.10+**
 - **FFmpeg** installed and available on `PATH` (used to extract/convert audio)
+- Python deps are installed via `pip install -e .` (includes `textual` and `psutil`)
 
 ## Installation
 
@@ -92,6 +94,18 @@ ffmpeg -version
 
 ## Usage
 
+Launch the interactive menu (default when no args):
+
+```bash
+transcriber
+```
+
+Launch the menu explicitly:
+
+```bash
+transcriber menu
+```
+
 Show all available commands:
 
 ```bash
@@ -102,6 +116,12 @@ Show help for the `run` command:
 
 ```bash
 transcriber run --help
+```
+
+Run tests:
+
+```bash
+transcriber test
 ```
 
 Transcribe a single file:
@@ -151,6 +171,14 @@ python -m app.main run input.mp3
   - `--device DEVICE` - inference device (defaults to config; `cpu` by default)
   - `--verbose` - enable debug logging
   - `--help` - show help
+
+`transcriber menu`:
+
+- Launches the interactive menu (prompt-based flow for transcription, settings, and system stats)
+
+`transcriber test`:
+
+- Runs the test suite (requires dev deps)
 
 ### Output behavior
 

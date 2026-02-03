@@ -21,8 +21,51 @@ def create_cli_app() -> typer.Typer:
     app = typer.Typer(
         add_completion=False,
         help="Offline MP3/MP4 transcription to TXT using faster-whisper.",
-        no_args_is_help=True,
+        no_args_is_help=False,
     )
+
+    def _launch_menu() -> None:
+        try:
+            from .menu import run_menu
+        except ModuleNotFoundError as exc:
+            typer.secho(
+                "Missing dependency: textual. Install with `pip install -e .`.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(code=2) from exc
+
+        run_menu()
+
+    @app.callback(invoke_without_command=True)
+    def _main(ctx: typer.Context) -> None:
+        """Launch menu when no subcommand is provided."""
+
+        if ctx.invoked_subcommand is None:
+            _launch_menu()
+
+    @app.command("menu")
+    def menu() -> None:
+        """Launch the interactive menu."""
+
+        _launch_menu()
+
+    @app.command("test")
+    def test() -> None:
+        """Run the test suite."""
+
+        from .testing import run_tests
+
+        try:
+            code, output = run_tests()
+        except ModuleNotFoundError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
+
+        if output:
+            typer.echo(output.rstrip())
+        if code != 0:
+            raise typer.Exit(code=code)
 
     @app.command("run")
     def run(

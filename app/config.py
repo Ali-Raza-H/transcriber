@@ -93,6 +93,31 @@ def load_config(path: Path | None = None) -> AppConfig:
     return AppConfig(engine=engine, output=output)
 
 
+def save_config(config: AppConfig, path: Path | None = None) -> Path:
+    """Save configuration to a TOML file.
+
+    Args:
+        config: Configuration values to persist.
+        path: Optional explicit config path. When None, uses the OS default.
+
+    Returns:
+        The path that was written.
+
+    Raises:
+        ValueError: If unsupported values are provided.
+    """
+
+    if config.output.extension.lower() != "txt":
+        raise ValueError("Only plain text output is supported: set [output].extension = 'txt'.")
+
+    config_path = path or get_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    content = _to_toml(config)
+    config_path.write_text(content, encoding="utf-8")
+    return config_path
+
+
 def _get_table(raw: dict[str, Any], key: str) -> dict[str, Any]:
     """Internal helper to get a TOML table as a dict."""
 
@@ -113,3 +138,16 @@ def _get_str(raw: dict[str, Any], key: str, default: str) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     raise ValueError(f"Invalid config: {key} must be a non-empty string.")
+
+
+def _to_toml(config: AppConfig) -> str:
+    """Serialize config data to TOML."""
+
+    return (
+        "[engine]\n"
+        f'model = "{config.engine.model}"\n'
+        f'device = "{config.engine.device}"\n'
+        "\n"
+        "[output]\n"
+        'extension = "txt"\n'
+    )

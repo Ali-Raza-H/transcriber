@@ -5,7 +5,7 @@ import platform
 
 import pytest
 
-from app.config import get_config_path, load_config
+from app.config import AppConfig, EngineConfig, OutputConfig, get_config_path, load_config, save_config
 
 
 def test_get_config_path_windows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,3 +37,14 @@ extension = "srt"
     with pytest.raises(ValueError, match="Only plain text output"):
         load_config(config_path)
 
+
+def test_save_config_writes_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config = AppConfig(
+        engine=EngineConfig(model="small", device="cpu"),
+        output=OutputConfig(extension="txt"),
+    )
+    save_config(config, config_path)
+    content = config_path.read_text(encoding="utf-8")
+    assert "model = \"small\"" in content
+    assert "device = \"cpu\"" in content
