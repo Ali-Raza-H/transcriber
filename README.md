@@ -40,6 +40,12 @@ pip install -e .
 pip install -e .
 ```
 
+Install all dependencies (runtime + dev/test):
+
+```bash
+pip install -e ".[dev]"
+```
+
 Install dependencies only (does not install the `transcriber` CLI entrypoint):
 
 ```bash

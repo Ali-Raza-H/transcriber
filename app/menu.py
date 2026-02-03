@@ -11,7 +11,7 @@ import threading
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, TextLog
+from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, RichLog, Static
 
 from .config import AppConfig, EngineConfig, OutputConfig, get_config_path, load_config, save_config
 from .testing import run_tests
@@ -404,20 +404,20 @@ class TestsView(Static):
         yield Label("Run tests", classes="title")
         with Vertical(classes="section"):
             yield Button("Run tests", id="run", classes="-primary")
-            yield TextLog(id="output", highlight=True, markup=False)
+            yield RichLog(id="output", highlight=True, markup=False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "run":
             self._run_tests()
 
     def _run_tests(self) -> None:
-        output = self.query_one("#output", TextLog)
+        output = self.query_one("#output", RichLog)
         output.clear()
         output.write("Running tests...\n")
         threading.Thread(target=self._run_tests_thread, daemon=True).start()
 
     def _run_tests_thread(self) -> None:
-        output = self.query_one("#output", TextLog)
+        output = self.query_one("#output", RichLog)
         try:
             code, result = run_tests()
             summary = "Tests passed." if code == 0 else f"Tests failed (exit code {code})."
