@@ -31,7 +31,7 @@ def run_menu() -> None:
 
     while True:
         _clear_screen()
-        _print_box(
+        _print_panel(
             "Transcriber Menu",
             [
                 "1) Transcribe a file",
@@ -39,11 +39,10 @@ def run_menu() -> None:
                 "3) System status",
                 "4) Run tests",
                 "5) Exit",
-                "",
-                "Tip: type q to quit.",
             ],
+            footer="Select option [1-5] (q to quit)",
         )
-        choice = input("\nSelect option [1-5]: ").strip().lower()
+        choice = input("> ").strip().lower()
 
         if choice == "1":
             _menu_transcribe()
@@ -65,7 +64,7 @@ def _menu_transcribe() -> None:
 
     config = _safe_load_config()
     _clear_screen()
-    _print_box(
+    _print_panel(
         "Transcribe a file",
         [
             f"Defaults: model={config.engine.model}, device={config.engine.device}",
@@ -116,19 +115,20 @@ def _menu_settings() -> None:
     while True:
         config = _safe_load_config()
         _clear_screen()
-        _print_box(
+        _print_panel(
             "Settings",
             [
                 f"Config path: {get_config_path()}",
-                f"Model:  {config.engine.model}",
-                f"Device: {config.engine.device}",
+                _format_kv("Model", config.engine.model),
+                _format_kv("Device", config.engine.device),
                 "",
                 "1) Edit settings",
                 "2) Reset to defaults",
                 "3) Back",
             ],
+            footer="Select option [1-3]",
         )
-        choice = input("\nSelect option [1-3]: ").strip()
+        choice = input("> ").strip()
 
         if choice == "1":
             model = input(f"Model [{config.engine.model}]: ").strip() or config.engine.model
@@ -163,8 +163,7 @@ def _menu_status() -> None:
 
     while True:
         _clear_screen()
-        _print_box("System status", _system_stats().splitlines())
-        print("\nRefresh? (y/N)")
+        _print_panel("System status", _system_stats().splitlines(), footer="Refresh? (y/N)")
         choice = input("> ").strip().lower()
         if choice != "y":
             break
@@ -175,7 +174,7 @@ def _menu_tests() -> None:
     """Run the test suite."""
 
     _clear_screen()
-    _print_box("Run tests", ["Running tests..."])
+    _print_panel("Run tests", ["Running tests..."])
     try:
         code, output = run_tests()
     except ModuleNotFoundError as exc:
@@ -264,17 +263,22 @@ def _clear_screen() -> None:
         pass
 
 
-def _print_box(title: str, lines: list[str]) -> None:
-    """Print a boxed layout with wrapped lines."""
+def _print_panel(title: str, lines: list[str], footer: str | None = None) -> None:
+    """Print a panel with a linux-style ASCII frame."""
 
-    width = _box_width(title, lines)
-    print("┌" + "─" * (width - 2) + "┐")
-    title_line = f" {title} "
-    print("│" + title_line.center(width - 2) + "│")
-    print("├" + "─" * (width - 2) + "┤")
+    width = _box_width(title, lines + ([footer] if footer else []))
+    top = "+" + "-" * (width - 2) + "+"
+    print(top)
+    title_line = f"[ {title} ]"
+    print("|" + title_line.ljust(width - 2) + "|")
+    print("|" + "-" * (width - 2) + "|")
     for line in _wrap_lines(lines, width - 4):
-        print("│ " + line.ljust(width - 4) + " │")
-    print("└" + "─" * (width - 2) + "┘")
+        print("| " + line.ljust(width - 4) + " |")
+    if footer:
+        print("|" + "-" * (width - 2) + "|")
+        for line in _wrap_lines([footer], width - 4):
+            print("| " + line.ljust(width - 4) + " |")
+    print(top)
 
 
 def _wrap_lines(lines: list[str], width: int) -> list[str]:
@@ -297,6 +301,12 @@ def _box_width(title: str, lines: list[str]) -> int:
     longest = max([len(title)] + [len(line) for line in lines if line], default=60)
     target = max(min_width, longest + 4)
     return max(40, min(terminal_width, target))
+
+
+def _format_kv(label: str, value: str) -> str:
+    """Format a key/value pair with alignment."""
+
+    return f"{label:<7}: {value}"
 
 
 def _pause(message: str) -> None:
