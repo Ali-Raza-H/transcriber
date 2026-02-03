@@ -11,3 +11,6 @@ def main() -> None:
     app = create_cli_app()
     app()
 
+
+if __name__ == "__main__":
+    main()
