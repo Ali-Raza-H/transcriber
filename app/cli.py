@@ -25,15 +25,7 @@ def create_cli_app() -> typer.Typer:
     )
 
     def _launch_menu() -> None:
-        try:
-            from .menu import run_menu
-        except ModuleNotFoundError as exc:
-            typer.secho(
-                "Missing dependency: textual. Install with `pip install -e .`.",
-                fg=typer.colors.RED,
-                err=True,
-            )
-            raise typer.Exit(code=2) from exc
+        from .menu import run_menu
 
         run_menu()
 
