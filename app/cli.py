@@ -39,8 +39,6 @@ def create_cli_app() -> typer.Typer:
             "-o",
             file_okay=False,
             dir_okay=True,
-            writable=True,
-            resolve_path=True,
             help="Output directory for the .txt transcript (defaults to input file directory).",
         ),
         model: Optional[str] = typer.Option(

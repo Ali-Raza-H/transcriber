@@ -1,12 +1,13 @@
 # Transcriber
 
-Production-quality, cross-platform, fully local transcription tool that converts **MP3** and **MP4** files into **plain text** (`.txt`) using the offline **faster-whisper** speech-to-text engine (no cloud APIs).
+Cross-platform, fully local transcription tool that converts **MP3** and **MP4** files into **plain text** (`.txt`) using the offline **faster-whisper** speech-to-text engine (no cloud APIs).
 
 ## Features
 
-- Offline transcription with `faster-whisper`
-- Supports **MP3** (direct input) and **MP4** (audio extracted automatically)
-- Outputs **plain text only** (`.txt`) — no timestamps, subtitles, or diarization
+- Offline transcription with `faster-whisper` (local inference)
+- Supports **MP3** input directly
+- Supports **MP4** input (audio extracted automatically via FFmpeg)
+- Outputs **plain text only** (`.txt`) - no timestamps, subtitles, or diarization
 - Cross-platform paths via `pathlib` (Windows + Linux)
 - Clean engine abstraction (future engines can be added without changing CLI logic)
 
@@ -14,26 +15,74 @@ Production-quality, cross-platform, fully local transcription tool that converts
 
 - Python **3.10+**
 - **FFmpeg** installed and available on `PATH` (used to extract/convert audio)
-- Whisper model files available locally (downloaded automatically on first use if missing)
-
-## Offline notes (models)
-
-Transcriber runs inference fully offline. If you pass a model **name** (like `small`), `faster-whisper` will download the model the first time it’s used *unless it’s already cached*. For strictly offline environments, pre-download the model once (while online) or set `--model` (or `[engine].model`) to a local model directory.
 
 ## Installation
 
-### 1) Install FFmpeg
+### Windows
 
-Windows (pick one):
+1. Install Python 3.10+
+2. Install FFmpeg (see below)
+3. From the project root (the folder containing `pyproject.toml`):
 
-- Winget: `winget install Gyan.FFmpeg`
-- Chocolatey: `choco install ffmpeg`
+```powershell
+pip install -e .
+```
 
-Linux (examples):
+### Linux
 
-- Debian/Ubuntu: `sudo apt-get update && sudo apt-get install -y ffmpeg`
-- Fedora: `sudo dnf install -y ffmpeg`
-- Arch: `sudo pacman -S ffmpeg`
+1. Install Python 3.10+
+2. Install FFmpeg (see below)
+3. From the project root (the folder containing `pyproject.toml`):
+
+```bash
+pip install -e .
+```
+
+Install dependencies only (does not install the `transcriber` CLI entrypoint):
+
+```bash
+pip install -r requirements.txt
+```
+
+## Installing FFmpeg
+
+Transcriber uses FFmpeg to extract/convert audio.
+
+### Windows
+
+Pick one:
+
+- Winget:
+  ```powershell
+  winget install Gyan.FFmpeg
+  ```
+- Chocolatey:
+  ```powershell
+  choco install ffmpeg
+  ```
+
+Verify:
+
+```powershell
+ffmpeg -version
+```
+
+### Linux
+
+Examples (pick the one for your distro):
+
+- Debian/Ubuntu:
+  ```bash
+  sudo apt-get update && sudo apt-get install -y ffmpeg
+  ```
+- Fedora:
+  ```bash
+  sudo dnf install -y ffmpeg
+  ```
+- Arch:
+  ```bash
+  sudo pacman -S ffmpeg
+  ```
 
 Verify:
 
@@ -41,15 +90,19 @@ Verify:
 ffmpeg -version
 ```
 
-### 2) Install Transcriber (editable)
+## Usage
 
-From the project root:
+Show all available commands:
 
 ```bash
-pip install -e .
+transcriber --help
 ```
 
-## Usage
+Show help for the `run` command:
+
+```bash
+transcriber run --help
+```
 
 Transcribe a single file:
 
@@ -75,10 +128,34 @@ Override device (optional):
 transcriber run input.mp3 --device cpu
 ```
 
+Enable verbose logging:
+
+```bash
+transcriber run input.mp3 --verbose
+```
+
+Run without installing (from the `transcriber/` folder):
+
+```bash
+python -m app.main run input.mp3
+```
+
+### Command reference
+
+`transcriber run`:
+
+- Argument: `INPUT_FILE` (required) - path to an `.mp3` or `.mp4` file
+- Options:
+  - `-o, --out DIR` - output directory (defaults to the input file's directory)
+  - `--model MODEL` - model size/name or local model directory (defaults to config; `small` by default)
+  - `--device DEVICE` - inference device (defaults to config; `cpu` by default)
+  - `--verbose` - enable debug logging
+  - `--help` - show help
+
 ### Output behavior
 
-- Output files are written as `<input-stem>.txt` (e.g., `meeting.mp4` → `meeting.txt`).
-- By default, the output is placed next to the input file unless `--out` is provided.
+- Output files are written as `<input-stem>.txt` (example: `meeting.mp4` -> `meeting.txt`).
+- By default, output is placed next to the input file unless `--out` is provided.
 
 ## Configuration (TOML)
 
@@ -100,73 +177,83 @@ extension = "txt"
 
 Notes:
 
-- CLI options override config values (e.g., `--model` overrides `[engine].model`).
+- CLI options override config values (for example, `--model` overrides `[engine].model`).
 - Only `.txt` output is supported; if `[output].extension` is set to anything else, Transcriber will error.
+
+## Offline model notes
+
+Transcriber runs inference fully offline. However, if you pass a model **name** (like `small`), `faster-whisper` may download model files the first time it's used unless the model is already cached.
+
+For strictly offline environments:
+
+- Download the model once ahead of time (while online), or
+- Set `--model` (or `[engine].model`) to a local model directory path.
 
 ## Whisper model sizes
 
 Approximate guide (trade-offs vary by hardware and audio quality):
 
-| Model | Size (params) | Speed | Accuracy |
-|------:|---------------:|:------|:---------|
-| tiny  | ~39M  | Fastest | Lowest |
-| base  | ~74M  | Faster  | Low |
-| small | ~244M | Medium  | Good |
-| medium| ~769M | Slower  | Better |
-| large | ~1550M| Slowest | Best |
+| Model  | Relative speed | Relative accuracy | Typical CPU RAM |
+|--------|-----------------|-------------------|-----------------|
+| tiny   | fastest         | lowest            | low             |
+| base   | fast            | low               | low             |
+| small  | medium          | good              | medium          |
+| medium | slow            | better            | higher          |
+| large  | slowest         | best              | highest         |
 
 Default: `small`.
 
 ## Project structure
 
-```
+```text
 transcriber/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # entry point
-│   ├── cli.py           # argument parsing
-│   ├── config.py        # config handling
-│   └── logging.py
-├── engine/
-│   ├── __init__.py
-│   ├── base.py          # transcription engine interface
-│   └── faster_whisper.py
-├── media/
-│   ├── __init__.py
-│   └── audio.py         # mp3/mp4 handling and ffmpeg integration
-├── output/
-│   ├── __init__.py
-│   └── text.py
-├── tests/
-├── pyproject.toml
-├── README.md
-├── LICENSE
-└── .gitignore
+|-- app/        # entry point, CLI, config, logging
+|-- engine/     # engine interface + faster-whisper implementation
+|-- media/      # MP3/MP4 handling and FFmpeg integration
+|-- output/     # plain text output writer
+|-- tests/      # unit tests (no model downloads required)
+|-- pyproject.toml
+|-- README.md
+|-- LICENSE
+`-- .gitignore
 ```
 
 ## Development roadmap
 
-- Add a **TUI (terminal UI)** for browsing media files and managing transcription jobs
+- Add a TUI (terminal UI) for browsing media files and managing transcription jobs
 - Add progress reporting and better UX around long transcriptions
 - Add additional offline engines behind the same engine interface
 
-## GitHub setup (first time)
+## Development commands
 
-1) Create an empty repository on GitHub:
-
-- `https://github.com/<your-username>/transcriber`
-
-2) Initialize git locally and push:
+Install dev dependencies:
 
 ```bash
-git init
+pip install -e ".[dev]"
+```
+
+Run tests:
+
+```bash
+pytest
+```
+
+## License
+
+MIT License. See `LICENSE`.
+
+## GitHub setup (first time)
+
+1. Create an empty repository on GitHub:
+   `https://github.com/<your-username>/transcriber`
+
+2. Initialize git locally and push (replace placeholders):
+
+```bash
+git init  # if you already have a .git folder, skip this
 git add .
 git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/<your-username>/transcriber.git
 git push -u origin main
 ```
-
-## License
-
-MIT License. See `LICENSE`.

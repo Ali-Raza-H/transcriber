@@ -49,6 +49,5 @@ ENV/
 Thumbs.db
 Desktop.ini
 
-# Transcriber outputs
-*.txt
-
+# Transcriber outputs (example output folder used in README)
+transcripts/
