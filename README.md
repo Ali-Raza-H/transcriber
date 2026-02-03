@@ -10,13 +10,13 @@ Cross-platform, fully local transcription tool that converts **MP3** and **MP4**
 - Outputs **plain text only** (`.txt`) - no timestamps, subtitles, or diarization
 - Cross-platform paths via `pathlib` (Windows + Linux)
 - Clean engine abstraction (future engines can be added without changing CLI logic)
-- Interactive text menu mode for prompts, settings, and system stats
+- Interactive modern TUI menu (Textual) for prompts, settings, and system stats
 
 ## Requirements
 
 - Python **3.10+**
 - **FFmpeg** installed and available on `PATH` (used to extract/convert audio)
-- Python deps are installed via `pip install -e .` (includes `psutil`)
+- Python deps are installed via `pip install -e .` (includes `psutil` and `textual`)
 
 ## Installation
 
@@ -174,7 +174,7 @@ python -m app.main run input.mp3
 
 `transcriber menu`:
 
-- Launches the interactive text menu (prompt-based flow for transcription, settings, and system stats)
+- Launches the modern TUI menu (Textual-based flow for transcription, settings, and system stats)
 
 `transcriber test`:
 

@@ -1,4 +1,4 @@
-"""Interactive text menu for Transcriber."""
+"""Modern TUI menu for Transcriber (Textual)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 import platform
 import shutil
-import textwrap
-import time
+import threading
+
+from textual.app import App, ComposeResult
+from textual.containers import Container, Horizontal, Vertical
+from textual.reactive import reactive
+from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, TextLog
 
 from .config import AppConfig, EngineConfig, OutputConfig, get_config_path, load_config, save_config
 from .testing import run_tests
@@ -29,164 +33,7 @@ class TranscribeRequest:
 def run_menu() -> None:
     """Run the interactive menu."""
 
-    while True:
-        _clear_screen()
-        _print_panel(
-            "Transcriber Menu",
-            [
-                "1) Transcribe a file",
-                "2) Settings",
-                "3) System status",
-                "4) Run tests",
-                "5) Exit",
-            ],
-            footer="Select option [1-5] (q to quit)",
-        )
-        choice = input("> ").strip().lower()
-
-        if choice == "1":
-            _menu_transcribe()
-        elif choice == "2":
-            _menu_settings()
-        elif choice == "3":
-            _menu_status()
-        elif choice == "4":
-            _menu_tests()
-        elif choice in {"5", "q", "quit", "exit"}:
-            break
-        else:
-            print("Invalid choice. Press Enter to try again.")
-            input()
-
-
-def _menu_transcribe() -> None:
-    """Prompt for transcription details and run the pipeline."""
-
-    config = _safe_load_config()
-    _clear_screen()
-    _print_panel(
-        "Transcribe a file",
-        [
-            f"Defaults: model={config.engine.model}, device={config.engine.device}",
-            "Enter 'q' to go back.",
-        ],
-    )
-
-    input_value = input("Input file (.mp3 or .mp4): ").strip()
-    if input_value.lower() in {"q", "quit", "back"}:
-        return
-
-    input_path = Path(input_value).expanduser()
-    if not input_path.exists():
-        _pause(f"Input file does not exist: {input_path}")
-        return
-    if not is_supported_media(input_path):
-        _pause("Unsupported file type. Use .mp3 or .mp4.")
-        return
-
-    output_value = input("Output directory (optional): ").strip()
-    output_dir = Path(output_value).expanduser() if output_value else input_path.parent
-
-    model_value = input(f"Model [{config.engine.model}]: ").strip() or config.engine.model
-    device_value = input(f"Device [{config.engine.device}]: ").strip() or config.engine.device
-
-    request = TranscribeRequest(
-        input_path=input_path,
-        output_dir=output_dir,
-        model=model_value,
-        device=device_value,
-    )
-
-    try:
-        print("\nTranscribing... This may take a while.")
-        output_path = _run_transcription(request)
-        _pause(f"Saved transcript: {output_path}")
-    except MediaError as exc:
-        _pause(f"Media error: {exc}")
-    except ModuleNotFoundError as exc:
-        _pause(str(exc))
-    except Exception as exc:  # noqa: BLE001 - CLI boundary
-        _pause(f"Error: {exc}")
-
-
-def _menu_settings() -> None:
-    """View and update configuration settings."""
-
-    while True:
-        config = _safe_load_config()
-        _clear_screen()
-        _print_panel(
-            "Settings",
-            [
-                f"Config path: {get_config_path()}",
-                _format_kv("Model", config.engine.model),
-                _format_kv("Device", config.engine.device),
-                "",
-                "1) Edit settings",
-                "2) Reset to defaults",
-                "3) Back",
-            ],
-            footer="Select option [1-3]",
-        )
-        choice = input("> ").strip()
-
-        if choice == "1":
-            model = input(f"Model [{config.engine.model}]: ").strip() or config.engine.model
-            device = input(f"Device [{config.engine.device}]: ").strip() or config.engine.device
-            new_config = AppConfig(
-                engine=EngineConfig(
-                    backend=config.engine.backend,
-                    model=model,
-                    device=device,
-                ),
-                output=OutputConfig(extension="txt"),
-            )
-            try:
-                path = save_config(new_config)
-                _pause(f"Saved: {path}")
-            except ValueError as exc:
-                _pause(f"Config error: {exc}")
-        elif choice == "2":
-            try:
-                path = save_config(AppConfig())
-                _pause(f"Reset to defaults: {path}")
-            except ValueError as exc:
-                _pause(f"Config error: {exc}")
-        elif choice == "3":
-            return
-        else:
-            _pause("Invalid choice.")
-
-
-def _menu_status() -> None:
-    """Show system status with optional refresh."""
-
-    while True:
-        _clear_screen()
-        _print_panel("System status", _system_stats().splitlines(), footer="Refresh? (y/N)")
-        choice = input("> ").strip().lower()
-        if choice != "y":
-            break
-        time.sleep(1.0)
-
-
-def _menu_tests() -> None:
-    """Run the test suite."""
-
-    _clear_screen()
-    _print_panel("Run tests", ["Running tests..."])
-    try:
-        code, output = run_tests()
-    except ModuleNotFoundError as exc:
-        _pause(str(exc))
-        return
-
-    if output:
-        print(output.strip())
-    if code == 0:
-        _pause("\nTests passed.")
-    else:
-        _pause(f"\nTests failed (exit code {code}).")
+    MenuApp().run()
 
 
 def _run_transcription(request: TranscribeRequest) -> Path:
@@ -242,6 +89,347 @@ def _system_stats() -> str:
     return "\n".join(lines)
 
 
+class MenuApp(App[None]):
+    """Top-level Textual app for the Transcriber menu."""
+
+    CSS = """
+    Screen {
+        background: #0b0f19;
+        color: #e6e6e6;
+    }
+
+    Header, Footer {
+        background: #111827;
+    }
+
+    #layout {
+        height: 1fr;
+    }
+
+    #sidebar {
+        width: 24;
+        background: #0f172a;
+        border: tall #1f2937;
+        padding: 1 1;
+    }
+
+    #content {
+        background: #0b0f19;
+        border: tall #1f2937;
+        padding: 1 2;
+    }
+
+    ListView {
+        background: #0f172a;
+        border: none;
+    }
+
+    ListItem.--highlight {
+        background: #1f2937;
+    }
+
+    .title {
+        text-style: bold;
+        color: #93c5fd;
+        margin-bottom: 1;
+    }
+
+    .section {
+        border: round #1f2937;
+        padding: 1 2;
+        margin-bottom: 1;
+    }
+
+    Input {
+        background: #0b1220;
+        border: round #1f2937;
+    }
+
+    Button {
+        background: #111827;
+        border: round #374151;
+    }
+
+    Button.-primary {
+        background: #2563eb;
+        border: round #1d4ed8;
+        color: #ffffff;
+    }
+
+    #message {
+        color: #f59e0b;
+        margin-top: 1;
+    }
+
+    #error {
+        color: #ef4444;
+        margin-top: 1;
+    }
+    """
+
+    BINDINGS = [("q", "quit", "Quit")]
+
+    current_view = reactive("transcribe")
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with Horizontal(id="layout"):
+            with Vertical(id="sidebar"):
+                yield Label("Menu", classes="title")
+                yield ListView(
+                    ListItem(Label("Transcribe"), id="transcribe"),
+                    ListItem(Label("Settings"), id="settings"),
+                    ListItem(Label("System Status"), id="status"),
+                    ListItem(Label("Run Tests"), id="tests"),
+                    ListItem(Label("Exit"), id="exit"),
+                    id="menu",
+                )
+            with Container(id="content"):
+                yield TranscribeView(id="view-transcribe")
+                yield SettingsView(id="view-settings")
+                yield StatusView(id="view-status")
+                yield TestsView(id="view-tests")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self._show_view("transcribe")
+        self.query_one("#menu", ListView).index = 0
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        target_id = event.item.id
+        if target_id == "exit":
+            self.exit()
+            return
+        if target_id == "transcribe":
+            self._show_view("transcribe")
+        elif target_id == "settings":
+            self._show_view("settings")
+        elif target_id == "status":
+            self._show_view("status")
+        elif target_id == "tests":
+            self._show_view("tests")
+
+    def _show_view(self, name: str) -> None:
+        self.current_view = name
+        self.query_one("#view-transcribe").display = name == "transcribe"
+        self.query_one("#view-settings").display = name == "settings"
+        self.query_one("#view-status").display = name == "status"
+        self.query_one("#view-tests").display = name == "tests"
+
+
+class TranscribeView(Static):
+    """Transcription form view."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("Transcribe a file", classes="title")
+        with Vertical(classes="section"):
+            yield Label("Input file (.mp3 or .mp4)")
+            yield Input(placeholder="C:\\path\\to\\audio.mp3", id="input_path")
+            yield Label("Output directory (optional)")
+            yield Input(placeholder="Leave blank to use input folder", id="output_dir")
+        with Vertical(classes="section"):
+            yield Label("Model (optional)")
+            yield Input(placeholder="Defaults to config", id="model")
+            yield Label("Device (optional)")
+            yield Input(placeholder="Defaults to config", id="device")
+        with Horizontal(classes="section"):
+            yield Button("Run", id="run", classes="-primary")
+            yield Button("Clear", id="clear")
+        yield Static("", id="message")
+
+    def on_show(self) -> None:
+        config = _safe_load_config()
+        message = self.query_one("#message", Static)
+        message.update(f"Defaults: model={config.engine.model}, device={config.engine.device}")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "clear":
+            self._clear_inputs()
+            return
+        if event.button.id == "run":
+            self._start_transcription()
+
+    def _clear_inputs(self) -> None:
+        for input_id in ["#input_path", "#output_dir", "#model", "#device"]:
+            self.query_one(input_id, Input).value = ""
+
+    def _start_transcription(self) -> None:
+        config = _safe_load_config()
+        input_value = self.query_one("#input_path", Input).value.strip()
+        if not input_value:
+            self._set_message("Enter an input file path.", error=True)
+            return
+
+        input_path = Path(input_value).expanduser()
+        if not input_path.exists():
+            self._set_message(f"Input file does not exist: {input_path}", error=True)
+            return
+        if not is_supported_media(input_path):
+            self._set_message("Unsupported file type. Use .mp3 or .mp4.", error=True)
+            return
+
+        output_value = self.query_one("#output_dir", Input).value.strip()
+        output_dir = Path(output_value).expanduser() if output_value else input_path.parent
+        model_value = self.query_one("#model", Input).value.strip() or config.engine.model
+        device_value = self.query_one("#device", Input).value.strip() or config.engine.device
+
+        request = TranscribeRequest(
+            input_path=input_path,
+            output_dir=output_dir,
+            model=model_value,
+            device=device_value,
+        )
+
+        self._set_message("Transcribing... This may take a while.")
+        self.query_one("#run", Button).disabled = True
+        threading.Thread(target=self._transcribe_thread, args=(request,), daemon=True).start()
+
+    def _transcribe_thread(self, request: TranscribeRequest) -> None:
+        try:
+            output_path = _run_transcription(request)
+            self.app.call_from_thread(
+                self._set_message, f"Saved transcript: {output_path}", False
+            )
+        except MediaError as exc:
+            self.app.call_from_thread(self._set_message, f"Media error: {exc}", True)
+        except ModuleNotFoundError as exc:
+            self.app.call_from_thread(self._set_message, str(exc), True)
+        except Exception as exc:  # noqa: BLE001 - UI boundary
+            self.app.call_from_thread(self._set_message, f"Error: {exc}", True)
+        finally:
+            self.app.call_from_thread(self._enable_run)
+
+    def _enable_run(self) -> None:
+        self.query_one("#run", Button).disabled = False
+
+    def _set_message(self, text: str, error: bool = False) -> None:
+        message = self.query_one("#message", Static)
+        message.update(text)
+        message.id = "error" if error else "message"
+
+
+class SettingsView(Static):
+    """Settings view for configuration updates."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("Settings", classes="title")
+        with Vertical(classes="section"):
+            yield Static("", id="config_path")
+            yield Label("Model")
+            yield Input(id="model")
+            yield Label("Device")
+            yield Input(id="device")
+        with Horizontal(classes="section"):
+            yield Button("Save", id="save", classes="-primary")
+            yield Button("Reset to defaults", id="reset")
+        yield Static("", id="message")
+
+    def on_show(self) -> None:
+        config = _safe_load_config()
+        self.query_one("#config_path", Static).update(f"Config path: {get_config_path()}")
+        self.query_one("#model", Input).value = config.engine.model
+        self.query_one("#device", Input).value = config.engine.device
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "save":
+            self._save()
+        elif event.button.id == "reset":
+            self._reset()
+
+    def _save(self) -> None:
+        config = _safe_load_config()
+        model = self.query_one("#model", Input).value.strip() or config.engine.model
+        device = self.query_one("#device", Input).value.strip() or config.engine.device
+
+        new_config = AppConfig(
+            engine=EngineConfig(
+                backend=config.engine.backend,
+                model=model,
+                device=device,
+            ),
+            output=OutputConfig(extension="txt"),
+        )
+        try:
+            path = save_config(new_config)
+            self._set_message(f"Saved: {path}", error=False)
+        except ValueError as exc:
+            self._set_message(f"Config error: {exc}", error=True)
+
+    def _reset(self) -> None:
+        try:
+            path = save_config(AppConfig())
+            self.on_show()
+            self._set_message(f"Reset to defaults: {path}", error=False)
+        except ValueError as exc:
+            self._set_message(f"Config error: {exc}", error=True)
+
+    def _set_message(self, text: str, error: bool = False) -> None:
+        message = self.query_one("#message", Static)
+        message.update(text)
+        message.id = "error" if error else "message"
+
+
+class StatusView(Static):
+    """Live system status view."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("System status", classes="title")
+        with Vertical(classes="section"):
+            yield Static("", id="stats")
+            yield Button("Refresh", id="refresh")
+
+    def on_mount(self) -> None:
+        try:
+            import psutil  # type: ignore
+
+            psutil.cpu_percent(interval=None)
+        except ModuleNotFoundError:
+            pass
+
+        self._refresh()
+        self.set_interval(1.0, self._refresh)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "refresh":
+            self._refresh()
+
+    def _refresh(self) -> None:
+        self.query_one("#stats", Static).update(_system_stats())
+
+
+class TestsView(Static):
+    """Test runner view."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("Run tests", classes="title")
+        with Vertical(classes="section"):
+            yield Button("Run tests", id="run", classes="-primary")
+            yield TextLog(id="output", highlight=True, markup=False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "run":
+            self._run_tests()
+
+    def _run_tests(self) -> None:
+        output = self.query_one("#output", TextLog)
+        output.clear()
+        output.write("Running tests...\n")
+        threading.Thread(target=self._run_tests_thread, daemon=True).start()
+
+    def _run_tests_thread(self) -> None:
+        output = self.query_one("#output", TextLog)
+        try:
+            code, result = run_tests()
+            summary = "Tests passed." if code == 0 else f"Tests failed (exit code {code})."
+            text = (result or "").strip()
+            combined = f"{summary}\n\n{text}" if text else summary
+            self.app.call_from_thread(output.write, combined)
+        except ModuleNotFoundError as exc:
+            self.app.call_from_thread(output.write, str(exc))
+        except Exception as exc:  # noqa: BLE001 - UI boundary
+            self.app.call_from_thread(output.write, f"Error: {exc}")
+
+
 def _safe_load_config() -> AppConfig:
     """Load config with fallback to defaults."""
 
@@ -249,68 +437,3 @@ def _safe_load_config() -> AppConfig:
         return load_config()
     except ValueError:
         return AppConfig()
-
-
-def _clear_screen() -> None:
-    """Clear the terminal screen."""
-
-    command = "cls" if platform.system().lower() == "windows" else "clear"
-    try:
-        import os
-
-        os.system(command)
-    except Exception:
-        pass
-
-
-def _print_panel(title: str, lines: list[str], footer: str | None = None) -> None:
-    """Print a panel with a linux-style ASCII frame."""
-
-    width = _box_width(title, lines + ([footer] if footer else []))
-    top = "+" + "-" * (width - 2) + "+"
-    print(top)
-    title_line = f"[ {title} ]"
-    print("|" + title_line.ljust(width - 2) + "|")
-    print("|" + "-" * (width - 2) + "|")
-    for line in _wrap_lines(lines, width - 4):
-        print("| " + line.ljust(width - 4) + " |")
-    if footer:
-        print("|" + "-" * (width - 2) + "|")
-        for line in _wrap_lines([footer], width - 4):
-            print("| " + line.ljust(width - 4) + " |")
-    print(top)
-
-
-def _wrap_lines(lines: list[str], width: int) -> list[str]:
-    """Wrap lines to the given width."""
-
-    wrapped: list[str] = []
-    for line in lines:
-        if not line:
-            wrapped.append("")
-            continue
-        wrapped.extend(textwrap.wrap(line, width=width) or [""])
-    return wrapped
-
-
-def _box_width(title: str, lines: list[str]) -> int:
-    """Compute a reasonable box width for the current terminal."""
-
-    terminal_width = shutil.get_terminal_size((80, 20)).columns
-    min_width = max(60, len(title) + 6)
-    longest = max([len(title)] + [len(line) for line in lines if line], default=60)
-    target = max(min_width, longest + 4)
-    return max(40, min(terminal_width, target))
-
-
-def _format_kv(label: str, value: str) -> str:
-    """Format a key/value pair with alignment."""
-
-    return f"{label:<7}: {value}"
-
-
-def _pause(message: str) -> None:
-    """Display a message and wait for user input."""
-
-    print(f"\n{message}")
-    input("Press Enter to continue...")
