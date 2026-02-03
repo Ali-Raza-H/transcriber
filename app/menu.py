@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import platform
 import shutil
+import textwrap
 import time
 
 from .config import AppConfig, EngineConfig, OutputConfig, get_config_path, load_config, save_config
@@ -30,13 +31,18 @@ def run_menu() -> None:
 
     while True:
         _clear_screen()
-        print("Transcriber Menu")
-        print("================")
-        print("1) Transcribe a file")
-        print("2) Settings")
-        print("3) System status")
-        print("4) Run tests")
-        print("5) Exit")
+        _print_box(
+            "Transcriber Menu",
+            [
+                "1) Transcribe a file",
+                "2) Settings",
+                "3) System status",
+                "4) Run tests",
+                "5) Exit",
+                "",
+                "Tip: type q to quit.",
+            ],
+        )
         choice = input("\nSelect option [1-5]: ").strip().lower()
 
         if choice == "1":
@@ -59,10 +65,13 @@ def _menu_transcribe() -> None:
 
     config = _safe_load_config()
     _clear_screen()
-    print("Transcribe a file")
-    print("=================")
-    print(f"Defaults: model={config.engine.model}, device={config.engine.device}")
-    print("Enter 'q' to go back.\n")
+    _print_box(
+        "Transcribe a file",
+        [
+            f"Defaults: model={config.engine.model}, device={config.engine.device}",
+            "Enter 'q' to go back.",
+        ],
+    )
 
     input_value = input("Input file (.mp3 or .mp4): ").strip()
     if input_value.lower() in {"q", "quit", "back"}:
@@ -107,14 +116,18 @@ def _menu_settings() -> None:
     while True:
         config = _safe_load_config()
         _clear_screen()
-        print("Settings")
-        print("========")
-        print(f"Config path: {get_config_path()}")
-        print(f"Model:  {config.engine.model}")
-        print(f"Device: {config.engine.device}\n")
-        print("1) Edit settings")
-        print("2) Reset to defaults")
-        print("3) Back")
+        _print_box(
+            "Settings",
+            [
+                f"Config path: {get_config_path()}",
+                f"Model:  {config.engine.model}",
+                f"Device: {config.engine.device}",
+                "",
+                "1) Edit settings",
+                "2) Reset to defaults",
+                "3) Back",
+            ],
+        )
         choice = input("\nSelect option [1-3]: ").strip()
 
         if choice == "1":
@@ -150,9 +163,7 @@ def _menu_status() -> None:
 
     while True:
         _clear_screen()
-        print("System status")
-        print("=============")
-        print(_system_stats())
+        _print_box("System status", _system_stats().splitlines())
         print("\nRefresh? (y/N)")
         choice = input("> ").strip().lower()
         if choice != "y":
@@ -164,7 +175,7 @@ def _menu_tests() -> None:
     """Run the test suite."""
 
     _clear_screen()
-    print("Running tests...\n")
+    _print_box("Run tests", ["Running tests..."])
     try:
         code, output = run_tests()
     except ModuleNotFoundError as exc:
@@ -251,6 +262,41 @@ def _clear_screen() -> None:
         os.system(command)
     except Exception:
         pass
+
+
+def _print_box(title: str, lines: list[str]) -> None:
+    """Print a boxed layout with wrapped lines."""
+
+    width = _box_width(title, lines)
+    print("┌" + "─" * (width - 2) + "┐")
+    title_line = f" {title} "
+    print("│" + title_line.center(width - 2) + "│")
+    print("├" + "─" * (width - 2) + "┤")
+    for line in _wrap_lines(lines, width - 4):
+        print("│ " + line.ljust(width - 4) + " │")
+    print("└" + "─" * (width - 2) + "┘")
+
+
+def _wrap_lines(lines: list[str], width: int) -> list[str]:
+    """Wrap lines to the given width."""
+
+    wrapped: list[str] = []
+    for line in lines:
+        if not line:
+            wrapped.append("")
+            continue
+        wrapped.extend(textwrap.wrap(line, width=width) or [""])
+    return wrapped
+
+
+def _box_width(title: str, lines: list[str]) -> int:
+    """Compute a reasonable box width for the current terminal."""
+
+    terminal_width = shutil.get_terminal_size((80, 20)).columns
+    min_width = max(60, len(title) + 6)
+    longest = max([len(title)] + [len(line) for line in lines if line], default=60)
+    target = max(min_width, longest + 4)
+    return max(40, min(terminal_width, target))
 
 
 def _pause(message: str) -> None:
